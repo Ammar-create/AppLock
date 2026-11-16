@@ -1,6 +1,7 @@
 package dev.pranav.applock.data.repository
 
 import android.content.Context
+import dev.pranav.applock.data.manager.BackendResolver
 import dev.pranav.applock.data.manager.BackendServiceManager
 import dev.pranav.applock.services.AppLockManager
 
@@ -90,6 +91,18 @@ class AppLockRepository(private val context: Context) {
     fun getBackendImplementation(): BackendImplementation =
         preferencesRepository.getBackendImplementation()
 
+    /**
+     * The backend that should actually run right now. When the user picked
+     * [BackendImplementation.AUTOMATIC] this walks the Shizuku -> Accessibility -> Usage
+     * stats chain; otherwise it is simply the selected backend.
+     */
+    fun getEffectiveBackend(): BackendImplementation =
+        AppLockManager.forcedBackend
+            ?: BackendResolver.resolve(context, preferencesRepository.getBackendImplementation())
+
+    fun isAutomaticBackend(): Boolean =
+        preferencesRepository.getBackendImplementation() == BackendImplementation.AUTOMATIC
+
     fun isShowCommunityLink(): Boolean = preferencesRepository.isShowCommunityLink()
     fun setCommunityLinkShown(shown: Boolean) = preferencesRepository.setCommunityLinkShown(shown)
     fun isShowDonateLink(): Boolean = preferencesRepository.isShowDonateLink(context)
@@ -107,13 +120,15 @@ class AppLockRepository(private val context: Context) {
         fun shouldStartService(repository: AppLockRepository, serviceClass: Class<*>): Boolean {
             return repository.backendServiceManager.shouldStartService(
                 serviceClass,
-                repository.getBackendImplementation()
+                repository.getEffectiveBackend()
             )
         }
     }
 }
 
 enum class BackendImplementation {
+    /** Picks Shizuku, then the accessibility service, then usage statistics. */
+    AUTOMATIC,
     ACCESSIBILITY,
     USAGE_STATS,
     SHIZUKU

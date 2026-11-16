@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import dev.pranav.applock.core.utils.LogUtils
+import dev.pranav.applock.data.manager.BackendWatchdog
 import dev.pranav.applock.data.repository.AppLockRepository
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import rikka.sui.Sui
@@ -30,6 +31,10 @@ class AppLockApplication : Application() {
         thread(start = true, name = "LogPurge") {
             LogUtils.purgeOldLogs()
         }
+
+        // If accessibility is enabled but crashed, fall back to usage stats instead of
+        // silently protecting nothing.
+        BackendWatchdog.schedule(this)
     }
 
     private fun initializeHiddenApiBypass() {

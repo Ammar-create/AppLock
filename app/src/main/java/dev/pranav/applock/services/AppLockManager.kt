@@ -5,9 +5,11 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
 import dev.pranav.applock.core.utils.LogUtils
+import dev.pranav.applock.data.repository.BackendImplementation
 import dev.pranav.applock.services.AppLockAccessibilityService.BiometricState
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 object AppLockConstants {
     val KNOWN_RECENTS_CLASSES = setOf(
@@ -56,6 +58,44 @@ object AppLockManager {
     val appUnlockTimes = ConcurrentHashMap<String, Long>()
     val isLockScreenShown = AtomicBoolean(false)
     var currentBiometricState: AppLockAccessibilityService.BiometricState? = null
+
+    /**
+     * Runtime override for the backend, set by the fallback watchdog when the selected
+     * backend turns out to be dead (for example a crashed accessibility service).
+     * Cleared as soon as the original backend comes back.
+     */
+    @Volatile
+    var forcedBackend: BackendImplementation? = null
+
+    private val lockScreenShownAt = AtomicLong(0L)
+
+    /** Any lock overlay older than this is treated as a leaked flag, not a real lock. */
+    private const val LOCK_SCREEN_STALE_MS = 45_000L
+
+    fun markLockScreenShown() {
+        lockScreenShownAt.set(System.currentTimeMillis())
+        isLockScreenShown.set(true)
+    }
+
+    fun markLockScreenHidden() {
+        lockScreenShownAt.set(0L)
+        isLockScreenShown.set(false)
+    }
+
+    /**
+     * True when a lock overlay is currently on screen AND it is not a leaked flag from a
+     * flow that never cleared it (biometric prompt cancelled, overlay failed to attach, ...).
+     */
+    fun isLockScreenBlocking(): Boolean {
+        if (!isLockScreenShown.get()) return false
+        val shownAt = lockScreenShownAt.get()
+        if (shownAt > 0L && System.currentTimeMillis() - shownAt > LOCK_SCREEN_STALE_MS) {
+            LogUtils.d(TAG, "Lock screen flag looks stale, clearing it")
+            markLockScreenHidden()
+            return false
+        }
+        return true
+    }
 
     // Grace period tracking
     private var recentlyLeftApp: String = ""

@@ -174,7 +174,7 @@ class ShizukuAppLockService : Service() {
                 val triggeringPackage = previousForegroundPackage
                 previousForegroundPackage = packageName
 
-                if (AppLockManager.isLockScreenShown.get() || packageName == this.packageName) {
+                if (AppLockManager.isLockScreenBlocking() || packageName == this.packageName) {
                     return@ShizukuActivityManager
                 }
 
@@ -227,13 +227,13 @@ class ShizukuAppLockService : Service() {
             AppLockManager.appUnlockTimes.remove(packageName)
         }
 
-        if (AppLockManager.isLockScreenShown.get()) {
+        if (AppLockManager.isLockScreenBlocking()) {
             LogUtils.d(TAG, "Lock screen already shown, skipping")
             return
         }
 
         LogUtils.d(TAG, "Locked app detected: $packageName. Showing overlay.")
-        AppLockManager.isLockScreenShown.set(true)
+        AppLockManager.markLockScreenShown()
 
         val intent = Intent(this, PasswordOverlayActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -248,7 +248,7 @@ class ShizukuAppLockService : Service() {
         try {
             startActivity(intent)
         } catch (e: Exception) {
-            AppLockManager.isLockScreenShown.set(false)
+            AppLockManager.markLockScreenHidden()
             Log.e(TAG, "Failed to start password overlay: ${e.message}", e)
         }
     }

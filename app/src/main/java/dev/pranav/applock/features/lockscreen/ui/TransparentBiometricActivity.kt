@@ -85,4 +85,11 @@ class TransparentBiometricActivity: FragmentActivity() {
             AppLockManager.reportBiometricAuthFinished()
         }
     }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Never leave the global "auth in progress" flag behind: a cancelled prompt used to
+        // block every future lock until the process was restarted.
+        AppLockManager.reportBiometricAuthFinished()
+    }
 }

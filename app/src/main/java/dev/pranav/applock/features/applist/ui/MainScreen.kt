@@ -90,7 +90,7 @@ fun MainScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 val appLockRepository = context.appLockRepository()
-                val backend = appLockRepository.getBackendImplementation()
+                val backend = appLockRepository.getEffectiveBackend()
                 val isAntiUninstallEnabled = appLockRepository.isAntiUninstallEnabled()
                 val dpm =
                     context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager

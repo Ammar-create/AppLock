@@ -139,6 +139,12 @@ class UsageLockService: Service() {
                 return
             }
 
+            if (appLockRepository.getEffectiveBackend() != BackendImplementation.USAGE_STATS) {
+                LogUtils.d(TAG, "Usage stats is no longer the active backend, stopping service")
+                stopSelf()
+                return
+            }
+
             val foregroundApp = getCurrentForegroundAppPackage() ?: return
             val currentPackage = foregroundApp.first
             val triggeringPackage = previousForegroundPackage
@@ -259,13 +265,13 @@ class UsageLockService: Service() {
             AppLockManager.appUnlockTimes.remove(packageName)
         }
 
-        if (AppLockManager.isLockScreenShown.get() || AppLockManager.currentBiometricState.toString() == biometricAuthStarted) {
+        if (AppLockManager.isLockScreenBlocking() || AppLockManager.currentBiometricState.toString() == biometricAuthStarted) {
             LogUtils.d(TAG, "Lock screen already shown or biometric auth in progress, skipping")
             return
         }
 
         LogUtils.d(TAG, "Locked app: $packageName. Showing overlay.")
-        AppLockManager.isLockScreenShown.set(true)
+        AppLockManager.markLockScreenShown()
 
         val intent = Intent(this, PasswordOverlayActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -281,7 +287,7 @@ class UsageLockService: Service() {
             startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Error starting overlay for: $packageName", e)
-            AppLockManager.isLockScreenShown.set(false)
+            AppLockManager.markLockScreenHidden()
         }
     }
 

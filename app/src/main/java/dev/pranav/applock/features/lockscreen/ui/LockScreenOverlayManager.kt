@@ -48,9 +48,9 @@ class LockScreenOverlayManager(private val context: Context):
     override val savedStateRegistry: SavedStateRegistry get() = savedStateRegistryController.savedStateRegistry
     override val viewModelStore: ViewModelStore get() = store
 
-    override val onBackPressedDispatcher = OnBackPressedDispatcher {
-        removeOverlay()
-    }
+    // No fallback handler on purpose: the old one removed the overlay without unlocking or
+    // leaving the app, which turned a stray back press into a full lock bypass.
+    override val onBackPressedDispatcher = OnBackPressedDispatcher { }
 
     fun showOverlay(
         lockedPackageName: String,
@@ -247,12 +247,15 @@ class LockScreenOverlayManager(private val context: Context):
         //    false
         //}
 
-        try {
+        return try {
             windowManager.addView(composeView, params)
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
             lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+            true
         } catch (e: Exception) {
             e.printStackTrace()
+            composeView = null
+            false
         }
     }
 

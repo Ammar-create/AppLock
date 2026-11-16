@@ -43,9 +43,12 @@ import dev.pranav.applock.core.utils.LogUtils
 import dev.pranav.applock.core.utils.hasUsagePermission
 import dev.pranav.applock.core.utils.isAccessibilityServiceEnabled
 import dev.pranav.applock.core.utils.openAccessibilitySettings
+import dev.pranav.applock.data.manager.BackendResolver
 import dev.pranav.applock.data.repository.AppLockRepository
 import dev.pranav.applock.data.repository.BackendImplementation
 import dev.pranav.applock.features.admin.AdminDisableActivity
+import dev.pranav.applock.services.AppLockAccessibilityService
+import dev.pranav.applock.services.AppLockManager
 import dev.pranav.applock.services.ShizukuAppLockService
 import dev.pranav.applock.services.UsageLockService
 import dev.pranav.applock.ui.components.DonateButton
@@ -772,6 +775,15 @@ fun BackendSelectionCard(
                         isSelected = selectedBackend == backend,
                         onClick = {
                             when (backend) {
+                                BackendImplementation.AUTOMATIC -> {
+                                    selectedBackend = backend
+                                    appLockRepository.setBackendImplementation(
+                                        BackendImplementation.AUTOMATIC
+                                    )
+                                    AppLockManager.forcedBackend = null
+                                    applyBackendSwitch(context, appLockRepository)
+                                }
+
                                 BackendImplementation.SHIZUKU -> {
                                     if (!Shizuku.pingBinder() || Shizuku.checkSelfPermission() == PackageManager.PERMISSION_DENIED) {
                                         if (Shizuku.isPreV11()) {
@@ -790,9 +802,8 @@ fun BackendSelectionCard(
                                         appLockRepository.setBackendImplementation(
                                             BackendImplementation.SHIZUKU
                                         )
-                                        context.startService(
-                                            Intent(context, ShizukuAppLockService::class.java)
-                                        )
+                                        AppLockManager.forcedBackend = null
+                                        applyBackendSwitch(context, appLockRepository)
                                     }
                                 }
                                 BackendImplementation.USAGE_STATS -> {
@@ -810,9 +821,8 @@ fun BackendSelectionCard(
                                     }
                                     selectedBackend = backend
                                     appLockRepository.setBackendImplementation(BackendImplementation.USAGE_STATS)
-                                    context.startService(
-                                        Intent(context, UsageLockService::class.java)
-                                    )
+                                    AppLockManager.forcedBackend = null
+                                    applyBackendSwitch(context, appLockRepository)
                                 }
                                 BackendImplementation.ACCESSIBILITY -> {
                                     if (!context.isAccessibilityServiceEnabled()) {
@@ -821,6 +831,8 @@ fun BackendSelectionCard(
                                     }
                                     selectedBackend = backend
                                     appLockRepository.setBackendImplementation(BackendImplementation.ACCESSIBILITY)
+                                    AppLockManager.forcedBackend = null
+                                    applyBackendSwitch(context, appLockRepository)
                                 }
                             }
                         }
@@ -906,6 +918,7 @@ fun BackendSelectionItem(
 
 private fun getBackendDisplayName(backend: BackendImplementation): String {
     return when (backend) {
+        BackendImplementation.AUTOMATIC -> "Automatic (recommended)"
         BackendImplementation.ACCESSIBILITY -> "Accessibility Service"
         BackendImplementation.USAGE_STATS -> "Usage Statistics"
         BackendImplementation.SHIZUKU -> "Shizuku Service"
@@ -914,6 +927,8 @@ private fun getBackendDisplayName(backend: BackendImplementation): String {
 
 private fun getBackendDescription(backend: BackendImplementation): String {
     return when (backend) {
+        BackendImplementation.AUTOMATIC ->
+            "Falls back automatically: Shizuku, then Accessibility, then Usage Statistics"
         BackendImplementation.ACCESSIBILITY -> "Standard method that works on most devices"
         BackendImplementation.USAGE_STATS -> "Experimental method using app usage statistics"
         BackendImplementation.SHIZUKU -> "Advanced method using Shizuku and internal APIs"
@@ -922,6 +937,7 @@ private fun getBackendDescription(backend: BackendImplementation): String {
 
 private fun getBackendIcon(backend: BackendImplementation): ImageVector {
     return when (backend) {
+        BackendImplementation.AUTOMATIC -> Icons.Default.Autorenew
         BackendImplementation.ACCESSIBILITY -> Accessibility
         BackendImplementation.USAGE_STATS -> Icons.Default.QueryStats
         BackendImplementation.SHIZUKU -> Icons.Default.AutoAwesome

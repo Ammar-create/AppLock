@@ -137,12 +137,12 @@ class PreferencesRepository(context: Context) {
     fun getBackendImplementation(): BackendImplementation {
         val backend = settingsPrefs.getString(
             KEY_BACKEND_IMPLEMENTATION,
-            BackendImplementation.ACCESSIBILITY.name
+            BackendImplementation.AUTOMATIC.name
         )
         return try {
-            BackendImplementation.valueOf(backend ?: BackendImplementation.ACCESSIBILITY.name)
+            BackendImplementation.valueOf(backend ?: BackendImplementation.AUTOMATIC.name)
         } catch (_: IllegalArgumentException) {
-            BackendImplementation.ACCESSIBILITY
+            BackendImplementation.AUTOMATIC
         }
     }
 

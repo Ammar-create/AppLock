@@ -22,7 +22,7 @@ object AppLockServiceStarter {
             startService(context, AppLockAccessibilityService::class.java)
         }
 
-        when (repository.getBackendImplementation()) {
+        when (repository.getEffectiveBackend()) {
             BackendImplementation.SHIZUKU -> {
                 startService(context, ShizukuAppLockService::class.java)
             }
@@ -33,6 +33,10 @@ object AppLockServiceStarter {
 
             BackendImplementation.USAGE_STATS -> {
                 startService(context, UsageLockService::class.java)
+            }
+
+            BackendImplementation.AUTOMATIC -> {
+                // getEffectiveBackend() never returns AUTOMATIC, this is unreachable.
             }
         }
     }

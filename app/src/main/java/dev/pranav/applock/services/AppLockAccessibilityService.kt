@@ -13,6 +13,7 @@ import android.os.Handler
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.core.content.getSystemService
@@ -46,6 +47,7 @@ class AppLockAccessibilityService : AccessibilityService() {
         private const val TAG = "AppLockAccessibility"
         private const val DEVICE_ADMIN_SETTINGS_PACKAGE = "com.android.settings"
         private const val APP_PACKAGE_PREFIX = "dev.pranav.applock"
+        private const val DISMISS_RECHECK_MS = 300L
 
         @Volatile
         var isServiceRunning = false
@@ -103,6 +105,7 @@ class AppLockAccessibilityService : AccessibilityService() {
             }
 
             Log.d(TAG, "Accessibility service connected")
+            AppLockManager.forcedBackend = null
             appLockRepository.setActiveBackend(BackendImplementation.ACCESSIBILITY)
         } catch (e: Exception) {
             logError("Error in onServiceConnected", e)
@@ -265,7 +268,7 @@ class AppLockAccessibilityService : AccessibilityService() {
     }
 
     private fun shouldAccessibilityHandleLocking(): Boolean {
-        return appLockRepository.getBackendImplementation() == BackendImplementation.ACCESSIBILITY
+        return appLockRepository.getEffectiveBackend() == BackendImplementation.ACCESSIBILITY
     }
 
     private fun checkAndLockApp(packageName: String, triggeringPackage: String, currentTime: Long) {
@@ -317,7 +320,7 @@ class AppLockAccessibilityService : AccessibilityService() {
             AppLockManager.clearTemporarilyUnlockedApp()
         }
 
-        if (AppLockManager.isLockScreenShown.get() ||
+        if (AppLockManager.isLockScreenBlocking() ||
             AppLockManager.currentBiometricState == BiometricState.AUTH_STARTED
         ) {
             LogUtils.d(TAG, "Lock screen already shown or biometric auth in progress, skipping")
@@ -328,25 +331,62 @@ class AppLockAccessibilityService : AccessibilityService() {
     }
 
     private fun showLockScreenOverlay(packageName: String, triggeringPackage: String) {
-        if (AppLockManager.isLockScreenShown.get()) return
+        if (AppLockManager.isLockScreenBlocking()) return
 
         LogUtils.d(TAG, "Showing overlay for: $packageName")
 
         mainHandler.post {
-            AppLockManager.isLockScreenShown.set(true)
-            overlayManager?.showOverlay(
+            AppLockManager.markLockScreenShown()
+
+            val shown = overlayManager?.showOverlay(
                 lockedPackageName = packageName,
                 triggeringPackageName = triggeringPackage,
                 onUnlock = {
-                    AppLockManager.isLockScreenShown.set(false)
+                    AppLockManager.markLockScreenHidden()
                     AppLockManager.unlockApp(packageName)
                 },
                 onExit = {
+                    // Dismissing the lock (X or back) must never leave the locked app usable.
+                    AppLockManager.markLockScreenHidden()
+                    AppLockManager.clearAppUnlockState(packageName)
                     performGlobalAction(GLOBAL_ACTION_HOME)
-                    Thread.sleep(200)
-                    AppLockManager.isLockScreenShown.set(false)
+
+                    mainHandler.postDelayed({
+                        if (isPackageInForeground(packageName)) {
+                            LogUtils.d(
+                                TAG,
+                                "Still inside $packageName after dismiss, re-locking instead of exposing it"
+                            )
+                            checkAndLockApp(packageName, triggeringPackage, System.currentTimeMillis())
+                        }
+                    }, DISMISS_RECHECK_MS)
                 }
-            )
+            ) ?: false
+
+            if (!shown) {
+                LogUtils.e(TAG, "Overlay could not be attached for $packageName")
+                AppLockManager.markLockScreenHidden()
+            }
+        }
+    }
+
+    /**
+     * Best effort foreground check used to verify that a "close the lock" action really took
+     * the user out of the locked app. When Home is swallowed by the OEM the app is still on
+     * top and would otherwise be silently usable.
+     */
+    private fun isPackageInForeground(packageName: String): Boolean {
+        return try {
+            val appWindows = windows?.filter {
+                it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+            }.orEmpty()
+            if (appWindows.isEmpty()) return false
+
+            val target = appWindows.firstOrNull { it.isActive } ?: appWindows.maxByOrNull { it.layer }
+            target?.root?.packageName?.toString() == packageName
+        } catch (e: Exception) {
+            logError("Failed foreground check for $packageName", e)
+            false
         }
     }
 
@@ -520,7 +560,7 @@ class AppLockAccessibilityService : AccessibilityService() {
         try {
             AppLockManager.stopAllOtherServices(this, AppLockAccessibilityService::class.java)
 
-            when (appLockRepository.getBackendImplementation()) {
+            when (appLockRepository.getEffectiveBackend()) {
                 BackendImplementation.SHIZUKU -> {
                     Log.d(TAG, "Starting Shizuku service as primary backend")
                     startService(Intent(this, ShizukuAppLockService::class.java))
@@ -531,7 +571,7 @@ class AppLockAccessibilityService : AccessibilityService() {
                     startService(Intent(this, UsageLockService::class.java))
                 }
 
-                else -> {
+                BackendImplementation.ACCESSIBILITY, BackendImplementation.AUTOMATIC -> {
                     Log.d(TAG, "Accessibility service is the primary backend.")
                 }
             }

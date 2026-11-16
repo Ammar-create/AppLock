@@ -55,7 +55,7 @@ class BootReceiver : BroadcastReceiver() {
             startService(context, AppLockAccessibilityService::class.java)
         }
 
-        when (repository.getBackendImplementation()) {
+        when (repository.getEffectiveBackend()) {
             BackendImplementation.SHIZUKU -> {
                 startService(context, ShizukuAppLockService::class.java)
             }
@@ -66,6 +66,11 @@ class BootReceiver : BroadcastReceiver() {
 
             BackendImplementation.USAGE_STATS -> {
                 startService(context, UsageLockService::class.java)
+            }
+
+            BackendImplementation.AUTOMATIC -> {
+                // Unreachable: the effective backend is always concrete.
+                startService(context, AppLockAccessibilityService::class.java)
             }
         }
     }
