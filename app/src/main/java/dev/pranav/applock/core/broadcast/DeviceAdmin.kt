@@ -24,10 +24,14 @@ class DeviceAdmin : DeviceAdminReceiver() {
         // *inside a broadcast receiver* and kills the whole process - which also killed
         // the bound accessibility service and left app locking completely dead until the
         // service was manually re-enabled. Never let a receiver throw like this.
-        val uninstallBlocked = tryBlockUninstall(context)
+        // The switch means "user wants uninstall protection". On modern Android the system
+        // part of it comes from the admin being active at all (an app with an active admin
+        // cannot be uninstalled until it is deactivated), so keep it enabled even when
+        // setUninstallBlocked is not permitted.
+        tryBlockUninstall(context)
 
         context.getSharedPreferences("app_lock_settings", Context.MODE_PRIVATE).edit {
-            putBoolean("anti_uninstall", uninstallBlocked)
+            putBoolean("anti_uninstall", true)
         }
     }
 
