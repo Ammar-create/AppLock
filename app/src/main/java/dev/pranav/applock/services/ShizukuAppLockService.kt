@@ -19,6 +19,7 @@ import dev.pranav.applock.R
 import dev.pranav.applock.core.broadcast.DeviceAdmin
 import dev.pranav.applock.core.utils.LogUtils
 import dev.pranav.applock.core.utils.appLockRepository
+import dev.pranav.applock.data.manager.BackendFallback
 import dev.pranav.applock.data.repository.AppLockRepository
 import dev.pranav.applock.data.repository.AppLockRepository.Companion.shouldStartService
 import dev.pranav.applock.data.repository.BackendImplementation
@@ -59,7 +60,11 @@ class ShizukuAppLockService : Service() {
         if (!shouldStartService(appLockRepository, this::class.java) || !isShizukuAvailable()) {
             Log.e(TAG, "Service not needed or Shizuku not ready. Stopping service.")
             isServiceRunning = false
+            val wasNeeded = shouldStartService(appLockRepository, this::class.java)
             stopSelf()
+            if (wasNeeded) {
+                BackendFallback.demote(this, BackendImplementation.SHIZUKU)
+            }
             return START_NOT_STICKY
         }
 
@@ -73,6 +78,7 @@ class ShizukuAppLockService : Service() {
             Log.e(TAG, "Shizuku failed to start. Stopping service.")
             isServiceRunning = false
             stopSelf()
+            BackendFallback.demote(this, BackendImplementation.SHIZUKU)
             return START_NOT_STICKY
         }
 
@@ -170,7 +176,14 @@ class ShizukuAppLockService : Service() {
 
     private fun setupShizukuActivityManager() {
         shizukuActivityManager =
-            ShizukuActivityManager(this, appLockRepository) { packageName, _, timeMillis ->
+            ShizukuActivityManager(
+                this,
+                appLockRepository,
+                onBackendUnhealthy = {
+                    BackendFallback.demote(this, BackendImplementation.SHIZUKU)
+                    stopSelf()
+                }
+            ) { packageName, _, timeMillis ->
                 val triggeringPackage = previousForegroundPackage
                 previousForegroundPackage = packageName
 

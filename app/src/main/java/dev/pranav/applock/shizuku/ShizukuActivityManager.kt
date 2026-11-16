@@ -26,12 +26,15 @@ import rikka.shizuku.SystemServiceHelper
 class ShizukuActivityManager(
     private val context: Context,
     private val appLockRepository: AppLockRepository,
+    private val onBackendUnhealthy: () -> Unit = {},
     private val onForegroundAppChanged: (String, String, Long) -> Unit
 ) {
     private val TAG = "ShizukuActivityManager"
     private var lastForegroundApp = ""
     private var deviceUnlockReceiver: DeviceUnlockReceiver? = null
     private var shouldLockAppsOnReturn = false
+    private var emptyPollCount = 0
+    private var healthReported = false
 
     private val handler = Handler(Looper.getMainLooper())
     private val checkForegroundRunnable = object : Runnable {
@@ -131,7 +134,23 @@ class ShizukuActivityManager(
 
         if (context.isDeviceLocked()) return
 
-        getTasksWrapper().filterVisible().forEach {
+        val visibleTasks = getTasksWrapper().filterVisible()
+
+        // If Shizuku cannot read the task list at all (signature mismatch, restricted shell)
+        // the service would silently protect nothing. Report it once and let the caller fall
+        // back to another backend.
+        if (visibleTasks.isEmpty()) {
+            emptyPollCount++
+            if (emptyPollCount >= 6 && !healthReported) {
+                healthReported = true
+                LogUtils.e(TAG, "Shizuku returned no visible tasks repeatedly, backend looks dead")
+                onBackendUnhealthy()
+            }
+            return
+        }
+        emptyPollCount = 0
+
+        visibleTasks.forEach {
             val activity = it.topActivity!!
             val packageName = activity.packageName
             val className = activity.className
