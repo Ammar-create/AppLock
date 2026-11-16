@@ -57,8 +57,12 @@ class LockScreenOverlayManager(private val context: Context):
         triggeringPackageName: String,
         onUnlock: () -> Unit,
         onExit: () -> Unit
-    ) {
-        if (composeView != null) return
+    ): Boolean {
+        if (composeView != null) {
+            // Never reuse a leftover overlay: it still holds the previous app's callbacks and
+            // would silently block the new lock from ever being displayed.
+            removeOverlay()
+        }
 
         if (!isStateRestored) {
             savedStateRegistryController.performRestore(null)

@@ -1123,3 +1123,42 @@ fun LinkItem(
         )
     )
 }
+
+/**
+ * Switches the active backend for real: stops whichever service was running before, then
+ * starts the one that should be running now. Picking "Accessibility" used to only write a
+ * preference, so a previously started Shizuku/Usage Stats service kept locking apps.
+ */
+private fun applyBackendSwitch(context: Context, repository: AppLockRepository) {
+    val effective = repository.getEffectiveBackend()
+
+    val targetService: Class<*> = when (effective) {
+        BackendImplementation.SHIZUKU -> ShizukuAppLockService::class.java
+        BackendImplementation.USAGE_STATS -> UsageLockService::class.java
+        BackendImplementation.ACCESSIBILITY,
+        BackendImplementation.AUTOMATIC -> AppLockAccessibilityService::class.java
+    }
+
+    AppLockManager.stopAllOtherServices(context, targetService)
+    AppLockManager.markLockScreenHidden()
+
+    when (effective) {
+        BackendImplementation.SHIZUKU -> {
+            if (BackendResolver.isShizukuReady()) {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, ShizukuAppLockService::class.java)
+                )
+            }
+        }
+
+        BackendImplementation.USAGE_STATS -> {
+            androidx.core.content.ContextCompat.startForegroundService(
+                context,
+                Intent(context, UsageLockService::class.java)
+            )
+        }
+
+        else -> Unit // Accessibility is bound by the system once it is enabled
+    }
+}
