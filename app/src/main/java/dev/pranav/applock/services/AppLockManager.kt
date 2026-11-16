@@ -70,7 +70,7 @@ object AppLockManager {
     private val lockScreenShownAt = AtomicLong(0L)
 
     /** Any lock overlay older than this is treated as a leaked flag, not a real lock. */
-    private const val LOCK_SCREEN_STALE_MS = 45_000L
+    private const val LOCK_SCREEN_STALE_MS = 5 * 60_000L
 
     fun markLockScreenShown() {
         lockScreenShownAt.set(System.currentTimeMillis())

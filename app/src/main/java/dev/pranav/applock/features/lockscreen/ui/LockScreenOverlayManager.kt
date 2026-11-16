@@ -139,6 +139,7 @@ class LockScreenOverlayManager(private val context: Context):
                                                     Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
                                                 putExtra("locked_package", lockedPackageName)
                                             }
+                                            AppLockManager.markLockScreenHidden()
                                             AppLockManager.reportBiometricAuthStarted()
                                             removeOverlay()
                                             context.startActivity(intent)
@@ -170,6 +171,7 @@ class LockScreenOverlayManager(private val context: Context):
                                                     Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
                                                 putExtra("locked_package", lockedPackageName)
                                             }
+                                            AppLockManager.markLockScreenHidden()
                                             AppLockManager.reportBiometricAuthStarted()
                                             removeOverlay()
                                             context.startActivity(intent)
@@ -202,6 +204,7 @@ class LockScreenOverlayManager(private val context: Context):
                                                     Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
                                                 putExtra("locked_package", lockedPackageName)
                                             }
+                                            AppLockManager.markLockScreenHidden()
                                             AppLockManager.reportBiometricAuthStarted()
                                             removeOverlay()
                                             context.startActivity(intent)

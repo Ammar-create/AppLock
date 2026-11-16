@@ -2,6 +2,7 @@ package dev.pranav.applock.features.lockscreen.ui
 
 import dev.pranav.applock.features.lockscreen.ui.AlphanumericPasswordOverlayScreen
 import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
@@ -217,7 +218,7 @@ class PasswordOverlayActivity: FragmentActivity() {
                                 triggeringPackageName = triggeringPackageNameFromIntent,
                                 onPasswordAttempt = onPinAttemptCallback,
                                 showCloseButton = true,
-                                onClose = { finish() }
+                                onClose = { leaveLockedApp() }
                             )
                         }
 
@@ -232,7 +233,7 @@ class PasswordOverlayActivity: FragmentActivity() {
                                 triggeringPackageName = triggeringPackageNameFromIntent,
                                 onPinAttempt = onPinAttemptCallback,
                                 showCloseButton = true,
-                                onClose = { finish() }
+                                onClose = { leaveLockedApp() }
                             )
 
                             BackHandler { }
@@ -241,6 +242,25 @@ class PasswordOverlayActivity: FragmentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Closing the lock is not the same as unlocking: go home (so the lock is not re-shown
+     * half a second later over the still-visible locked app) and finish the overlay.
+     */
+    private fun leaveLockedApp() {
+        lockedPackageNameFromIntent?.let { AppLockManager.clearAppUnlockState(it) }
+        AppLockManager.markLockScreenHidden()
+        try {
+            val home = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(home)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not navigate home", e)
+        }
+        finish()
     }
 
     private fun setupBiometricPromptInternal() {
@@ -284,7 +304,7 @@ class PasswordOverlayActivity: FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        AppLockManager.isLockScreenShown.set(true) // Set to true when activity is visible
+        AppLockManager.markLockScreenShown() // Lock screen is visible right now
         lifecycleScope.launch {
             applyUserPreferences()
         }
@@ -319,13 +339,13 @@ class PasswordOverlayActivity: FragmentActivity() {
         super.onPause()
         if (!isChangingConfigurations && !isBiometricPromptShowingLocal) {
             Log.d(TAG, "Overlay paused; lock screen hidden but app remains locked")
-            AppLockManager.isLockScreenShown.set(false)
+            AppLockManager.markLockScreenHidden()
         }
     }
 
     override fun onResumeFragments() {
         super.onResumeFragments()
-        AppLockManager.isLockScreenShown.set(true)
+        AppLockManager.markLockScreenShown()
     }
 
     override fun onStop() {
@@ -334,7 +354,7 @@ class PasswordOverlayActivity: FragmentActivity() {
             return
         }
         Log.d(TAG, "Overlay stopped; finishing lock overlay")
-        AppLockManager.isLockScreenShown.set(false)
+        AppLockManager.markLockScreenHidden()
         if (!isFinishing && !isDestroyed) {
             finish()
         }
@@ -342,7 +362,7 @@ class PasswordOverlayActivity: FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        AppLockManager.isLockScreenShown.set(false)
+        AppLockManager.markLockScreenHidden()
         AppLockManager.reportBiometricAuthFinished()
         Log.d(TAG, "PasswordOverlayActivity onDestroy for $lockedPackageNameFromIntent")
     }
