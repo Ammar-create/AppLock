@@ -270,6 +270,19 @@ class UsageLockService: Service() {
             return
         }
 
+        // Usage events lag behind reality by a second or two, so the app may already be gone
+        // by now. Locking at that point just paints the lock over the launcher.
+        val stillForeground = try {
+            getCurrentForegroundAppPackage()?.first == packageName
+        } catch (e: Exception) {
+            Log.e(TAG, "Foreground re-check failed, assuming $packageName is still in front", e)
+            true
+        }
+        if (!stillForeground) {
+            LogUtils.d(TAG, "$packageName already left the foreground, skipping lock")
+            return
+        }
+
         LogUtils.d(TAG, "Locked app: $packageName. Showing overlay.")
         AppLockManager.markLockScreenShown()
 

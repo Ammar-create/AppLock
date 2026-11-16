@@ -25,6 +25,7 @@ import dev.pranav.applock.data.repository.AppLockRepository.Companion.shouldStar
 import dev.pranav.applock.data.repository.BackendImplementation
 import dev.pranav.applock.features.lockscreen.ui.PasswordOverlayActivity
 import dev.pranav.applock.shizuku.ShizukuActivityManager
+import dev.pranav.applock.shizuku.topActivity
 import rikka.shizuku.Shizuku
 
 class ShizukuAppLockService : Service() {
@@ -242,6 +243,18 @@ class ShizukuAppLockService : Service() {
 
         if (AppLockManager.isLockScreenBlocking()) {
             LogUtils.d(TAG, "Lock screen already shown, skipping")
+            return
+        }
+
+        // The task list is polled, so by the time we get here the app may have been closed.
+        val foreground = try {
+            topActivity?.packageName
+        } catch (e: Exception) {
+            Log.e(TAG, "Top activity check failed, assuming $packageName is still in front", e)
+            packageName
+        }
+        if (foreground != null && foreground != packageName) {
+            LogUtils.d(TAG, "$packageName is no longer on top, skipping lock")
             return
         }
 

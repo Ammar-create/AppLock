@@ -48,6 +48,7 @@ class AppLockAccessibilityService : AccessibilityService() {
         private const val DEVICE_ADMIN_SETTINGS_PACKAGE = "com.android.settings"
         private const val APP_PACKAGE_PREFIX = "dev.pranav.applock"
         private const val DISMISS_RECHECK_MS = 300L
+        private const val FOREGROUND_CONFIRM_DELAY_MS = 220L
 
         @Volatile
         var isServiceRunning = false
@@ -337,9 +338,22 @@ class AppLockAccessibilityService : AccessibilityService() {
     private fun showLockScreenOverlay(packageName: String, triggeringPackage: String) {
         if (AppLockManager.isLockScreenBlocking()) return
 
-        LogUtils.d(TAG, "Showing overlay for: $packageName")
+        LogUtils.d(TAG, "Preparing overlay for: $packageName")
 
-        mainHandler.post {
+        // A locked app can leave the foreground between the event and this point (swipe up,
+        // recents, back gesture). Locking then would drop the overlay on top of the launcher,
+        // which looks like "it asks for the password while I am closing the app".
+        mainHandler.postDelayed({
+            if (AppLockManager.isLockScreenBlocking()) return@postDelayed
+
+            if (isAnotherPackageInForeground(packageName)) {
+                LogUtils.d(
+                    TAG,
+                    "$packageName is no longer in front, skipping the lock instead of covering the launcher"
+                )
+                return@postDelayed
+            }
+
             AppLockManager.markLockScreenShown()
 
             val shown = overlayManager?.showOverlay(
@@ -371,7 +385,7 @@ class AppLockAccessibilityService : AccessibilityService() {
                 LogUtils.e(TAG, "Overlay could not be attached for $packageName")
                 AppLockManager.markLockScreenHidden()
             }
-        }
+        }, FOREGROUND_CONFIRM_DELAY_MS)
     }
 
     /**
@@ -379,6 +393,22 @@ class AppLockAccessibilityService : AccessibilityService() {
      * the user out of the locked app. When Home is swallowed by the OEM the app is still on
      * top and would otherwise be silently usable.
      */
+    private fun isAnotherPackageInForeground(packageName: String): Boolean {
+        return try {
+            val appWindows = windows?.filter {
+                it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+            }.orEmpty()
+            if (appWindows.isEmpty()) return false
+
+            val target = appWindows.firstOrNull { it.isActive } ?: appWindows.maxByOrNull { it.layer }
+            val foreground = target?.root?.packageName?.toString() ?: return false
+            foreground != packageName
+        } catch (e: Exception) {
+            logError("Failed foreground check for $packageName", e)
+            false
+        }
+    }
+
     private fun isPackageInForeground(packageName: String): Boolean {
         return try {
             val appWindows = windows?.filter {
