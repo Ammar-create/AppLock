@@ -5,23 +5,26 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
+import dev.pranav.applock.services.AppLockAccessibilityService
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuRemoteProcess
 
 fun Context.isAccessibilityServiceEnabled(): Boolean {
-    val accessibilityServiceName =
-        "$packageName/$packageName.services.AppLockAccessibilityService"
+    // Resolve the real component instead of string-building it: the class name lives in the
+    // library namespace, which does not follow the applicationId (forks/suffix builds).
+    val expected = ComponentName(this, AppLockAccessibilityService::class.java)
+    val full = expected.flattenToString()
+    val short = expected.flattenToShortString()
+
     val enabledServices = Settings.Secure.getString(
         contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-    )
-    if (enabledServices?.contains(accessibilityServiceName) == true) {
-        return true
-    } else {
-        if (enabledServices?.contains("$packageName/.services.AppLockAccessibilityService") == true) {
-            return true
-        }
-    }
-    return false
+    ) ?: return false
+
+    return enabledServices
+        .split(':')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .any { it.equals(full, ignoreCase = true) || it.equals(short, ignoreCase = true) }
 }
 
 fun openAccessibilitySettings(context: Context) {

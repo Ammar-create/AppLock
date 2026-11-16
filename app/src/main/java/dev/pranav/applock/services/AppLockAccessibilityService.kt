@@ -229,7 +229,11 @@ class AppLockAccessibilityService : AccessibilityService() {
         }
 
         // Skip excluded packages
-        if (packageName == APP_PACKAGE_PREFIX ||
+        // Match the real package as well as legacy prefixes so suffixed builds never lock
+        // themselves out of their own settings.
+        if (packageName == this.packageName ||
+            packageName == APP_PACKAGE_PREFIX ||
+            packageName.startsWith("$APP_PACKAGE_PREFIX.") ||
             packageName in keyboardPackages ||
             packageName in EXCLUDED_APPS
         ) {
